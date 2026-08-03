@@ -1,13 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Briefcase, Activity, ExternalLink, BarChart3, Clock, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Search, Briefcase, Activity, ExternalLink, BarChart3, Clock, AlertCircle, ChevronUp, ChevronDown, Mail } from 'lucide-react';
 
 // === COLOQUE A URL DO SEU GOOGLE APPS SCRIPT AQUI ===
 const API_URL = 'https://script.google.com/macros/s/AKfycbwamZAAeYlS5fRB4zoNzyzZ4I74cnJjjdXz6CSCvYoJRhrJkS2bJIuClK7Mk03j2M-u/exec'; 
-
-const MOCK_DATA = [
-  { id: 1, date: '2023-10-25', company: 'Google', title: 'Senior Frontend Engineer', level: 'Senior', status: 'Entrevista', link: '#' },
-  { id: 2, date: '2023-10-24', company: 'Amazon', title: 'React Developer', level: 'Pleno', status: 'Enviado', link: '#' },
-];
 
 function getStatusStyle(status) {
   const s = (status || '').toLowerCase();
@@ -20,14 +15,26 @@ function getStatusStyle(status) {
 }
 
 function parseDate(dateStr) {
-  if (!dateStr) return '';
-  // Tenta manter o formato brasileiro se vier da planilha ou formatar ISO
+  if (!dateStr) return { display: '', dateObj: new Date(0) };
   try {
-    if (dateStr.includes('/')) return dateStr; 
+    if (typeof dateStr === 'string' && dateStr.includes('/')) {
+      // already brazilian format DD/MM/YYYY, let's parse to Date object for sorting
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        return { display: dateStr, dateObj: new Date(`${parts[2]}-${parts[1]}-${parts[0]}T12:00:00Z`) };
+      }
+      return { display: dateStr, dateObj: new Date(0) };
+    }
+    
+    // For ISO dates like 2026-08-02T03:00:00.000Z or 2026-08-02
     const d = new Date(dateStr);
-    return isNaN(d) ? dateStr : d.toLocaleDateString('pt-BR');
+    if (isNaN(d)) return { display: dateStr, dateObj: new Date(0) };
+    
+    // Force UTC formatting to prevent timezone shift by 1 day
+    const display = d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+    return { display, dateObj: d };
   } catch {
-    return dateStr;
+    return { display: dateStr, dateObj: new Date(0) };
   }
 }
 
@@ -37,50 +44,44 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState('');
+  
+  // Sorting state (default: date descending)
+  const [sortConfig, setSortConfig] = useState({ key: 'dateObj', direction: 'desc' });
 
   useEffect(() => {
     const fetchJobs = async () => {
       setIsLoading(true);
       setError(null);
       
-      if (API_URL === 'COLE_SUA_URL_AQUI') {
-        // Se a URL ainda não foi colocada, exibe o MOCK e um aviso
-        setTimeout(() => {
-          setJobs(MOCK_DATA);
-          setIsLoading(false);
-          setError("Aviso: A API_URL não foi configurada. Exibindo dados de teste.");
-          setLastUpdate(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
-        }, 1000);
-        return;
-      }
-
       try {
         const response = await fetch(API_URL);
         const data = await response.json();
         
         if (data.error) throw new Error(data.error);
 
-        // Mapeamento dinâmico das colunas exatas da sua planilha
-        const mappedJobs = data.map((item, index) => ({
-          id: index,
-          date: parseDate(item['Data do E-mail']),
-          company: item['Empresa / Plataforma'] || 'Desconhecida',
-          title: item['Título da Vaga'] || '',
-          level: item['Nível'] || '',
-          status: item['Tipo / Status da Resposta'] || 'Em Análise',
-          link: item['Link da Vaga'] || item['Link do E-mail'] || '#'
-        }));
+        const mappedJobs = data.map((item, index) => {
+          const parsedDate = parseDate(item['Data do E-mail']);
+          return {
+            id: index,
+            date: parsedDate.display,
+            dateObj: parsedDate.dateObj,
+            company: item['Empresa / Plataforma'] || 'Desconhecida',
+            title: item['Título da Vaga'] || '',
+            level: item['Nível'] || '',
+            status: item['Tipo / Status da Resposta'] || 'Em Análise',
+            link: item['Link da Vaga'] && item['Link da Vaga'] !== 'N/A' ? item['Link da Vaga'] : null,
+            emailLink: item['Link do E-mail'] && item['Link do E-mail'] !== 'N/A' ? item['Link do E-mail'] : null
+          };
+        });
         
-        // Remove itens em branco
         const validJobs = mappedJobs.filter(j => j.company !== 'Desconhecida' || j.title !== '');
-
-        // Inverte a ordem para as mais recentes ficarem no topo (assumindo que as novas caem no fim da planilha)
-        setJobs(validJobs.reverse());
+        
+        setJobs(validJobs);
         setLastUpdate(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
-        setIsLoading(false);
       } catch (err) {
         console.error('Error fetching data:', err);
-        setError("Erro ao carregar dados da planilha. Verifique a URL do Web App.");
+        setError("Erro ao carregar dados da planilha. Verifique se o Google Apps Script está ativo e com permissão 'Qualquer Pessoa'.");
+      } finally {
         setIsLoading(false);
       }
     };
@@ -88,7 +89,40 @@ function App() {
     fetchJobs();
   }, []);
 
-  const filteredJobs = jobs.filter(job => 
+  const requestSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortIcon = (key) => {
+    if (!sortConfig || sortConfig.key !== key) return null;
+    return sortConfig.direction === 'asc' ? <ChevronUp className="w-4 h-4 inline-block ml-1" /> : <ChevronDown className="w-4 h-4 inline-block ml-1" />;
+  };
+
+  const sortedJobs = useMemo(() => {
+    let sortableItems = [...jobs];
+    if (sortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        let aValue = a[sortConfig.key];
+        let bValue = b[sortConfig.key];
+
+        if (typeof aValue === 'string') {
+          aValue = aValue.toLowerCase();
+          bValue = (bValue || '').toLowerCase();
+        }
+
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [jobs, sortConfig]);
+
+  const filteredJobs = sortedJobs.filter(job => 
     job.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
     job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     job.status.toLowerCase().includes(searchTerm.toLowerCase())
@@ -104,7 +138,9 @@ function App() {
     <div className="min-h-screen bg-[#0a0a0b] text-zinc-100 font-sans selection:bg-indigo-500/30">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.15),rgba(255,255,255,0))] pointer-events-none"></div>
       
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 relative z-10">
+      {/* Container Responsivo e Expandido */}
+      <div className="w-full max-w-[95%] 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-10 relative z-10">
+        
         {/* Header section */}
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
           <div>
@@ -115,7 +151,7 @@ function App() {
             <p className="text-zinc-400 mt-2">Acompanhe suas candidaturas automatizadas pelo Gemini Spark.</p>
           </div>
           
-          <div className="relative group">
+          <div className="relative group w-full md:w-auto">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-5 w-5 text-zinc-500 group-focus-within:text-indigo-400 transition-colors" />
             </div>
@@ -178,11 +214,21 @@ function App() {
             <table className="min-w-full divide-y divide-zinc-800/80">
               <thead className="bg-zinc-900/80">
                 <tr>
-                  <th scope="col" className="px-6 py-5 text-left text-xs font-semibold text-zinc-400 uppercase tracking-wider">Data</th>
-                  <th scope="col" className="px-6 py-5 text-left text-xs font-semibold text-zinc-400 uppercase tracking-wider">Empresa</th>
-                  <th scope="col" className="px-6 py-5 text-left text-xs font-semibold text-zinc-400 uppercase tracking-wider">Vaga</th>
-                  <th scope="col" className="px-6 py-5 text-left text-xs font-semibold text-zinc-400 uppercase tracking-wider">Nível</th>
-                  <th scope="col" className="px-6 py-5 text-left text-xs font-semibold text-zinc-400 uppercase tracking-wider">Status</th>
+                  <th scope="col" className="px-6 py-5 text-left text-xs font-semibold text-zinc-400 uppercase tracking-wider cursor-pointer hover:text-white transition-colors" onClick={() => requestSort('dateObj')}>
+                    Data {getSortIcon('dateObj')}
+                  </th>
+                  <th scope="col" className="px-6 py-5 text-left text-xs font-semibold text-zinc-400 uppercase tracking-wider cursor-pointer hover:text-white transition-colors" onClick={() => requestSort('company')}>
+                    Empresa {getSortIcon('company')}
+                  </th>
+                  <th scope="col" className="px-6 py-5 text-left text-xs font-semibold text-zinc-400 uppercase tracking-wider cursor-pointer hover:text-white transition-colors" onClick={() => requestSort('title')}>
+                    Vaga {getSortIcon('title')}
+                  </th>
+                  <th scope="col" className="px-6 py-5 text-left text-xs font-semibold text-zinc-400 uppercase tracking-wider cursor-pointer hover:text-white transition-colors" onClick={() => requestSort('level')}>
+                    Nível {getSortIcon('level')}
+                  </th>
+                  <th scope="col" className="px-6 py-5 text-left text-xs font-semibold text-zinc-400 uppercase tracking-wider cursor-pointer hover:text-white transition-colors" onClick={() => requestSort('status')}>
+                    Status {getSortIcon('status')}
+                  </th>
                   <th scope="col" className="px-6 py-5 text-right text-xs font-semibold text-zinc-400 uppercase tracking-wider">Ações</th>
                 </tr>
               </thead>
@@ -225,11 +271,19 @@ function App() {
                           {job.status}
                         </span>
                       </td>
-                      <td className="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
-                        {job.link !== '#' && job.link !== 'N/A' && (
-                          <a href={job.link} target="_blank" rel="noopener noreferrer" className="inline-flex text-zinc-500 hover:text-indigo-400 transition-colors p-2 hover:bg-indigo-500/10 rounded-lg">
+                      <td className="px-6 py-5 whitespace-nowrap text-right text-sm font-medium flex justify-end gap-2">
+                        {job.link && (
+                          <a href={job.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-zinc-500 hover:text-indigo-400 transition-colors p-2 hover:bg-indigo-500/10 rounded-lg" title="Link da Vaga">
                             <ExternalLink className="w-4 h-4" />
                           </a>
+                        )}
+                        {job.emailLink && (
+                          <a href={job.emailLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-zinc-500 hover:text-emerald-400 transition-colors p-2 hover:bg-emerald-500/10 rounded-lg" title="Ver E-mail">
+                            <Mail className="w-4 h-4" />
+                          </a>
+                        )}
+                        {!job.link && !job.emailLink && (
+                          <span className="text-zinc-600 text-xs italic">Sem links</span>
                         )}
                       </td>
                     </tr>
