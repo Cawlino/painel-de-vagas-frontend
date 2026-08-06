@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Briefcase, Activity, ExternalLink, BarChart3, Clock, AlertCircle, ChevronUp, ChevronDown, Mail } from 'lucide-react';
 
-// === COLOQUE A URL DO SEU GOOGLE APPS SCRIPT AQUI ===
-const API_URL = 'https://script.google.com/macros/s/AKfycbwamZAAeYlS5fRB4zoNzyzZ4I74cnJjjdXz6CSCvYoJRhrJkS2bJIuClK7Mk03j2M-u/exec'; 
+const API_URL = '/api/vagas'; 
 
 function getStatusStyle(status) {
   const s = (status || '').toLowerCase();
