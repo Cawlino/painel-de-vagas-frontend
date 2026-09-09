@@ -1,15 +1,14 @@
 /**
  * Scraper LinkedIn — API Guest Pública
  * 
- * Utiliza o endpoint público (sem autenticação) do LinkedIn
- * para buscar vagas de emprego por keywords e localização.
+ * Busca ampla de vagas de TI em Maringá e remotas no Brasil/mundo.
+ * Utiliza o endpoint público (sem autenticação) do LinkedIn.
  */
 
 import * as cheerio from 'cheerio';
 
 const LINKEDIN_BASE_URL = 'https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search';
 
-// User agents rotativos para evitar fingerprinting
 const USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
@@ -18,20 +17,27 @@ const USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15',
 ];
 
-// Keywords de busca baseadas no perfil do Daniel
-const SEARCH_KEYWORDS = [
-  'desenvolvedor full stack',
-  'react developer',
-  'frontend developer',
-  'full stack developer',
-  'software engineer',
-  'desenvolvedor web',
-  'node.js developer',
-  'python developer',
-  'desenvolvedor react',
-  'analista de dados',
-  'desenvolvedor junior',
-  'desenvolvedor pleno',
+// Buscas para Maringá e região — vagas de TI locais
+const MARINGA_SEARCHES = [
+  { keywords: 'desenvolvedor', location: 'Maringá, Paraná, Brasil' },
+  { keywords: 'developer', location: 'Maringá, Paraná, Brasil' },
+  { keywords: 'analista de TI', location: 'Maringá, Paraná, Brasil' },
+  { keywords: 'tecnologia da informação', location: 'Maringá, Paraná, Brasil' },
+  { keywords: 'programador', location: 'Maringá, Paraná, Brasil' },
+  { keywords: 'full stack', location: 'Maringá, Paraná, Brasil' },
+  { keywords: 'suporte técnico TI', location: 'Maringá, Paraná, Brasil' },
+];
+
+// Buscas remotas — vagas de TI em todo o Brasil (incluindo remotas e internacionais)
+const REMOTE_SEARCHES = [
+  { keywords: 'desenvolvedor remoto', location: 'Brasil' },
+  { keywords: 'remote developer', location: 'Brazil' },
+  { keywords: 'full stack remote', location: 'Brazil' },
+  { keywords: 'react developer remote', location: '' },
+  { keywords: 'software engineer remote', location: '' },
+  { keywords: 'python developer remoto', location: 'Brasil' },
+  { keywords: 'analista de dados remoto', location: 'Brasil' },
+  { keywords: 'automação TI remoto', location: 'Brasil' },
 ];
 
 function getRandomUserAgent() {
@@ -44,19 +50,18 @@ function delay(ms) {
 
 /**
  * Faz uma requisição para a API guest do LinkedIn
- * @param {string} keyword - Termo de busca
- * @param {string} location - Localização
- * @param {number} start - Offset de paginação (0, 25, 50...)
- * @returns {Array} Lista de vagas parseadas
  */
-async function fetchLinkedInPage(keyword, location = 'Maringá, Paraná, Brasil', start = 0) {
+async function fetchLinkedInPage(keyword, location = '', start = 0) {
   const params = new URLSearchParams({
     keywords: keyword,
-    location: location,
     start: start.toString(),
     f_TPR: 'r604800', // últimos 7 dias
-    sortBy: 'DD', // mais recentes primeiro
+    sortBy: 'DD',
   });
+
+  if (location) {
+    params.set('location', location);
+  }
 
   const url = `${LINKEDIN_BASE_URL}?${params.toString()}`;
 
@@ -73,22 +78,20 @@ async function fetchLinkedInPage(keyword, location = 'Maringá, Paraná, Brasil'
     });
 
     if (!response.ok) {
-      console.warn(`LinkedIn returned ${response.status} for keyword "${keyword}" at start=${start}`);
+      console.warn(`[LinkedIn] HTTP ${response.status} for "${keyword}" location="${location}" start=${start}`);
       return [];
     }
 
     const html = await response.text();
     return parseLinkedInHTML(html);
   } catch (error) {
-    console.error(`Error fetching LinkedIn for "${keyword}":`, error.message);
+    console.error(`[LinkedIn] Error fetching "${keyword}":`, error.message);
     return [];
   }
 }
 
 /**
  * Parseia o HTML retornado pelo endpoint guest do LinkedIn
- * @param {string} html - HTML bruto
- * @returns {Array} Vagas extraídas
  */
 function parseLinkedInHTML(html) {
   const $ = cheerio.load(html);
@@ -137,56 +140,39 @@ function parseLinkedInHTML(html) {
 
 /**
  * Executa o scraping completo do LinkedIn
- * Busca com múltiplas keywords e remove duplicatas
- * @returns {Array} Todas as vagas encontradas (sem filtro de perfil)
+ * Busca vagas de TI em Maringá + vagas remotas amplas
  */
 export async function scrapeLinkedIn() {
-  console.log('[LinkedIn] Iniciando scraping...');
+  console.log('[LinkedIn] Iniciando scraping amplo de vagas de TI...');
   const allJobs = [];
-  const seenLinks = new Set();
+  const seenKeys = new Set();
 
-  // Limitar a 4 keywords por execução para não sobrecarregar
-  // e respeitar o tempo máximo da serverless function (10s no free tier)
-  const keywordsToSearch = SEARCH_KEYWORDS.slice(0, 4);
-
-  for (const keyword of keywordsToSearch) {
-    console.log(`[LinkedIn] Buscando: "${keyword}"`);
-    
-    const jobs = await fetchLinkedInPage(keyword);
-    
-    for (const job of jobs) {
-      // Deduplicar por link
-      if (job.link && !seenLinks.has(job.link)) {
-        seenLinks.add(job.link);
-        allJobs.push(job);
-      } else if (!job.link) {
-        // Se não tem link, deduplicar por título + empresa
-        const key = `${job.title}|${job.company}`;
-        if (!seenLinks.has(key)) {
-          seenLinks.add(key);
-          allJobs.push(job);
-        }
-      }
-    }
-
-    // Delay entre requisições para evitar rate limiting (1-2 segundos)
-    await delay(1500 + Math.random() * 1000);
-  }
-
-  // Também buscar vagas remotas de TI
-  console.log('[LinkedIn] Buscando vagas remotas...');
-  const remoteJobs = await fetchLinkedInPage('desenvolvedor', 'Brasil', 0);
-  for (const job of remoteJobs) {
-    const loc = (job.location || '').toLowerCase();
-    if (loc.includes('remoto') || loc.includes('remote') || loc.includes('home office')) {
-      const key = job.link || `${job.title}|${job.company}`;
-      if (!seenLinks.has(key)) {
-        seenLinks.add(key);
-        allJobs.push(job);
-      }
+  function addJob(job) {
+    const key = job.link || `${job.title}|${job.company}`;
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      allJobs.push(job);
     }
   }
 
-  console.log(`[LinkedIn] Total de vagas coletadas: ${allJobs.length}`);
+  // 1. Buscar vagas em Maringá e região (até 5 buscas para não estourar tempo)
+  const maringaSearches = MARINGA_SEARCHES.slice(0, 5);
+  for (const search of maringaSearches) {
+    console.log(`[LinkedIn] Maringá: "${search.keywords}"`);
+    const jobs = await fetchLinkedInPage(search.keywords, search.location);
+    jobs.forEach(addJob);
+    await delay(1200 + Math.random() * 800);
+  }
+
+  // 2. Buscar vagas remotas (até 4 buscas)
+  const remoteSearches = REMOTE_SEARCHES.slice(0, 4);
+  for (const search of remoteSearches) {
+    console.log(`[LinkedIn] Remoto: "${search.keywords}"`);
+    const jobs = await fetchLinkedInPage(search.keywords, search.location);
+    jobs.forEach(addJob);
+    await delay(1200 + Math.random() * 800);
+  }
+
+  console.log(`[LinkedIn] Total de vagas coletadas (sem duplicatas): ${allJobs.length}`);
   return allJobs;
 }
