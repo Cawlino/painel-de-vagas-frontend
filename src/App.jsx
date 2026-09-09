@@ -45,7 +45,7 @@ function App() {
   // Filtrar por tab de fonte
   const jobsByTab = useMemo(() => {
     if (activeTab === 'linkedin') return data.jobs.filter(j => j.source === 'linkedin');
-    if (activeTab === 'maringa.com') return data.jobs.filter(j => j.source === 'maringa.com');
+    if (activeTab === 'catho') return data.jobs.filter(j => j.source === 'catho');
     return data.jobs;
   }, [data.jobs, activeTab]);
 
@@ -69,7 +69,7 @@ function App() {
   const tabCounts = useMemo(() => ({
     todas: data.jobs.length,
     linkedin: data.jobs.filter(j => j.source === 'linkedin').length,
-    'maringa.com': data.jobs.filter(j => j.source === 'maringa.com').length,
+    'catho': data.jobs.filter(j => j.source === 'catho').length,
   }), [data.jobs]);
 
   return (

@@ -1,36 +1,28 @@
 /**
  * Scrape Orchestrator — Vercel Serverless Function
  * 
- * Executa os scrapers do LinkedIn e Maringá.com,
+ * Executa os scrapers do LinkedIn e Catho,
  * aplica o filtro de perfil, e armazena os resultados em cache.
  * 
- * Chamado pelo cron job da Vercel (3x/dia) ou manualmente via GET /api/scrape
+ * Chamado pelo cron job da Vercel (1x/dia) ou manualmente via GET /api/scrape
  */
 
 import { scrapeLinkedIn } from './lib/scraper-linkedin.js';
-import { scrapeMaringa } from './lib/scraper-maringa.js';
+import { scrapeCatho } from './lib/scraper-catho.js';
 import { filterAndClassifyJobs } from './lib/profile-filter.js';
 
-// Cache em memória (persistido entre invocações na mesma instância)
-// Em produção, o cron grava aqui e o /api/vagas lê daqui
-// Nota: em serverless, cada instância tem seu próprio cache,
-// mas como o cron e o vagas.js rodam na mesma infraestrutura Vercel,
-// usamos um store compartilhado via globalThis
 if (!globalThis.__vagasCache) {
   globalThis.__vagasCache = {
     jobs: [],
     lastUpdate: null,
-    stats: { linkedin: 0, maringa: 0, filtered: 0 },
+    stats: { linkedin: 0, catho: 0, filtered: 0 },
   };
 }
 
 export default async function handler(req, res) {
-  // Proteger contra chamadas não autorizadas em produção
-  // O cron da Vercel envia um header especial
   const authHeader = req.headers['authorization'];
   const cronSecret = process.env.CRON_SECRET;
   
-  // Permitir sem auth em desenvolvimento ou se não configurou CRON_SECRET
   const isAuthorized = !cronSecret || 
                        authHeader === `Bearer ${cronSecret}` ||
                        req.headers['x-vercel-cron'] === '1';
@@ -44,27 +36,27 @@ export default async function handler(req, res) {
     const startTime = Date.now();
 
     // Executar scrapers em paralelo
-    const [linkedinJobs, maringaJobs] = await Promise.all([
+    const [linkedinJobs, cathoJobs] = await Promise.all([
       scrapeLinkedIn().catch(err => {
         console.error('[Scraper] Erro no LinkedIn:', err.message);
         return [];
       }),
-      scrapeMaringa().catch(err => {
-        console.error('[Scraper] Erro no Maringá.com:', err.message);
+      scrapeCatho().catch(err => {
+        console.error('[Scraper] Erro na Catho:', err.message);
         return [];
       }),
     ]);
 
     console.log(`[Scraper] LinkedIn: ${linkedinJobs.length} vagas brutas`);
-    console.log(`[Scraper] Maringá.com: ${maringaJobs.length} vagas brutas`);
+    console.log(`[Scraper] Catho: ${cathoJobs.length} vagas brutas`);
 
     // Unificar todas as vagas
-    const allJobs = [...linkedinJobs, ...maringaJobs];
+    const allJobs = [...linkedinJobs, ...cathoJobs];
 
-    // Aplicar filtro de perfil e classificação de localização
+    // Aplicar filtro (só remove não-TI) e classificação de localização
     const filteredJobs = filterAndClassifyJobs(allJobs);
 
-    console.log(`[Scraper] Vagas após filtro de perfil: ${filteredJobs.length}`);
+    console.log(`[Scraper] Vagas após filtro: ${filteredJobs.length}`);
 
     // Adicionar IDs únicos
     const jobsWithIds = filteredJobs.map((job, index) => ({
@@ -72,7 +64,7 @@ export default async function handler(req, res) {
       id: `${job.source}-${Date.now()}-${index}`,
     }));
 
-    // Mesclar com cache existente (mantendo vagas antigas que ainda são válidas)
+    // Mesclar com cache existente
     const existingJobs = globalThis.__vagasCache.jobs || [];
     const mergedJobs = mergeJobs(existingJobs, jobsWithIds);
 
@@ -82,7 +74,7 @@ export default async function handler(req, res) {
       lastUpdate: new Date().toISOString(),
       stats: {
         linkedin: linkedinJobs.length,
-        maringa: maringaJobs.length,
+        catho: cathoJobs.length,
         filtered: mergedJobs.length,
         rawTotal: allJobs.length,
       },
@@ -104,15 +96,10 @@ export default async function handler(req, res) {
   }
 }
 
-/**
- * Mescla vagas novas com existentes, evitando duplicatas
- * Mantém no máximo 200 vagas mais recentes
- */
 function mergeJobs(existing, newJobs) {
   const seen = new Set();
   const merged = [];
 
-  // Adicionar novas primeiro (mais prioritárias)
   for (const job of newJobs) {
     const key = job.link || `${job.title}|${job.company}`;
     if (!seen.has(key)) {
@@ -121,7 +108,6 @@ function mergeJobs(existing, newJobs) {
     }
   }
 
-  // Adicionar existentes que não estejam duplicadas
   for (const job of existing) {
     const key = job.link || `${job.title}|${job.company}`;
     if (!seen.has(key)) {
@@ -130,6 +116,5 @@ function mergeJobs(existing, newJobs) {
     }
   }
 
-  // Limitar a 200 vagas
-  return merged.slice(0, 200);
+  return merged.slice(0, 300);
 }

@@ -8,20 +8,18 @@
  */
 
 import { scrapeLinkedIn } from './lib/scraper-linkedin.js';
-import { scrapeMaringa } from './lib/scraper-maringa.js';
+import { scrapeCatho } from './lib/scraper-catho.js';
 import { filterAndClassifyJobs } from './lib/profile-filter.js';
 
-// Referência ao cache global compartilhado com scrape.js
 if (!globalThis.__vagasCache) {
   globalThis.__vagasCache = {
     jobs: [],
     lastUpdate: null,
-    stats: { linkedin: 0, maringa: 0, filtered: 0 },
+    stats: { linkedin: 0, catho: 0, filtered: 0 },
   };
 }
 
 export default async function handler(req, res) {
-  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
   res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=3600');
@@ -38,12 +36,12 @@ export default async function handler(req, res) {
       console.log('[API /vagas] Cache vazio ou antigo, executando scraping on-demand...');
       
       try {
-        const [linkedinJobs, maringaJobs] = await Promise.all([
+        const [linkedinJobs, cathoJobs] = await Promise.all([
           scrapeLinkedIn().catch(() => []),
-          scrapeMaringa().catch(() => []),
+          scrapeCatho().catch(() => []),
         ]);
 
-        const allJobs = [...linkedinJobs, ...maringaJobs];
+        const allJobs = [...linkedinJobs, ...cathoJobs];
         const filteredJobs = filterAndClassifyJobs(allJobs);
         
         const jobsWithIds = filteredJobs.map((job, index) => ({
@@ -56,7 +54,7 @@ export default async function handler(req, res) {
           lastUpdate: new Date().toISOString(),
           stats: {
             linkedin: linkedinJobs.length,
-            maringa: maringaJobs.length,
+            catho: cathoJobs.length,
             filtered: jobsWithIds.length,
           },
         };
@@ -64,7 +62,6 @@ export default async function handler(req, res) {
         cache = globalThis.__vagasCache;
       } catch (scrapeErr) {
         console.error('[API /vagas] Erro no scraping on-demand:', scrapeErr.message);
-        // Retorna cache antigo se existir, ou array vazio
       }
     }
 
@@ -90,7 +87,7 @@ export default async function handler(req, res) {
       jobs: [],
       maringa: [],
       remoto: [],
-      stats: { linkedin: 0, maringa: 0, filtered: 0, totalMaringa: 0, totalRemoto: 0 },
+      stats: { linkedin: 0, catho: 0, filtered: 0, totalMaringa: 0, totalRemoto: 0 },
       lastUpdate: null,
     });
   }

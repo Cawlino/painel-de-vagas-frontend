@@ -3,7 +3,7 @@ import React from 'react';
 const TABS = [
   { id: 'todas', label: 'Todas' },
   { id: 'linkedin', label: 'LinkedIn' },
-  { id: 'maringa.com', label: 'Maringá.com' },
+  { id: 'catho', label: 'Catho' },
 ];
 
 export default function TabFilter({ activeTab, onTabChange, counts }) {

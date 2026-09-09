@@ -13,7 +13,7 @@ function getSourceBadge(source) {
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
       <MapPin className="w-3 h-3" />
-      Maringá.com
+      Catho
     </span>
   );
 }

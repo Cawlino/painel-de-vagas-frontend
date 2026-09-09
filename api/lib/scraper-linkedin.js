@@ -17,27 +17,36 @@ const USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15',
 ];
 
-// Buscas para Maringá e região — vagas de TI locais
+// Buscas para Maringá e região — vagas de TI locais (ampla)
 const MARINGA_SEARCHES = [
   { keywords: 'desenvolvedor', location: 'Maringá, Paraná, Brasil' },
   { keywords: 'developer', location: 'Maringá, Paraná, Brasil' },
+  { keywords: 'software', location: 'Maringá, Paraná, Brasil' },
+  { keywords: 'analista de sistemas', location: 'Maringá, Paraná, Brasil' },
   { keywords: 'analista de TI', location: 'Maringá, Paraná, Brasil' },
-  { keywords: 'tecnologia da informação', location: 'Maringá, Paraná, Brasil' },
+  { keywords: 'analista de dados', location: 'Maringá, Paraná, Brasil' },
   { keywords: 'programador', location: 'Maringá, Paraná, Brasil' },
   { keywords: 'full stack', location: 'Maringá, Paraná, Brasil' },
-  { keywords: 'suporte técnico TI', location: 'Maringá, Paraná, Brasil' },
+  { keywords: 'suporte TI', location: 'Maringá, Paraná, Brasil' },
+  { keywords: 'tecnologia', location: 'Maringá, Paraná, Brasil' },
+  { keywords: 'informática', location: 'Maringá, Paraná, Brasil' },
+  { keywords: 'QA tester', location: 'Maringá, Paraná, Brasil' },
+  { keywords: 'devops', location: 'Maringá, Paraná, Brasil' },
+  { keywords: 'inteligência artificial', location: 'Maringá, Paraná, Brasil' },
 ];
 
-// Buscas remotas — vagas de TI em todo o Brasil (incluindo remotas e internacionais)
+// Buscas remotas — vagas de TI em todo o Brasil e internacionais
 const REMOTE_SEARCHES = [
   { keywords: 'desenvolvedor remoto', location: 'Brasil' },
   { keywords: 'remote developer', location: 'Brazil' },
-  { keywords: 'full stack remote', location: 'Brazil' },
+  { keywords: 'full stack remote', location: '' },
   { keywords: 'react developer remote', location: '' },
   { keywords: 'software engineer remote', location: '' },
   { keywords: 'python developer remoto', location: 'Brasil' },
   { keywords: 'analista de dados remoto', location: 'Brasil' },
   { keywords: 'automação TI remoto', location: 'Brasil' },
+  { keywords: 'remote frontend developer', location: '' },
+  { keywords: 'remote backend developer', location: '' },
 ];
 
 function getRandomUserAgent() {
